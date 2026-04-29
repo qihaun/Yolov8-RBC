@@ -380,7 +380,7 @@ class RBCDetectWindow(QMainWindow):
 
         default_model = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
-            "runs", "detect", "train7", "weights", "best.pt"
+            "runs", "detect", "train_cbam", "weights", "best.pt"
         )
         if os.path.exists(default_model):
             self.load_model(default_model)
