@@ -1,16 +1,31 @@
-import sys
 import os
+import sys
 import traceback
-import cv2
-import numpy as np
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                             QPushButton, QCheckBox, QLabel, QFileDialog, QSlider, QDoubleSpinBox,
-                             QGroupBox, QMessageBox, QScrollArea, QFrame, QSizePolicy,
-                             QProgressBar)
-from PyQt5.QtGui import QImage, QPixmap, QFont
-from ultralytics import YOLO
 
+import cv2
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtGui import QFont, QImage, QPixmap
+from PyQt5.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
+
+from ultralytics import YOLO
 
 # ==================== 全局样式表 ====================
 STYLE_QSS = """
@@ -226,11 +241,7 @@ class DetectThread(QThread):
         self.show_wbc = show_wbc
         self.show_plate = show_plate
 
-        self.class_map = {
-            0: "RBC",
-            1: "WBC",
-            2: "Platelet"
-        }
+        self.class_map = {0: "RBC", 1: "WBC", 2: "Platelet"}
 
     def run(self):
         try:
@@ -238,11 +249,7 @@ class DetectThread(QThread):
             total = len(self.img_paths)
             for i, path in enumerate(self.img_paths):
                 pred = self.model.predict(
-                    source=path,
-                    conf=self.conf_thres,
-                    iou=self.iou_thres,
-                    save=False,
-                    verbose=False
+                    source=path, conf=self.conf_thres, iou=self.iou_thres, save=False, verbose=False
                 )[0]
 
                 img = cv2.imread(path)
@@ -253,9 +260,11 @@ class DetectThread(QThread):
                     cls_id = int(box.cls)
                     cls_name = self.class_map.get(cls_id, "unknown")
 
-                    if (cls_name == "RBC" and self.show_rbc) or \
-                            (cls_name == "WBC" and self.show_wbc) or \
-                            (cls_name == "Platelet" and self.show_plate):
+                    if (
+                        (cls_name == "RBC" and self.show_rbc)
+                        or (cls_name == "WBC" and self.show_wbc)
+                        or (cls_name == "Platelet" and self.show_plate)
+                    ):
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
                         conf = float(box.conf)
                         filtered_boxes.append([x1, y1, x2, y2, cls_name, conf])
@@ -269,8 +278,7 @@ class DetectThread(QThread):
                         color = (60, 100, 220)
 
                     cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
-                    cv2.putText(img, f"{cls_name} {conf:.2f}", (x1, y1 - 5),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    cv2.putText(img, f"{cls_name} {conf:.2f}", (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
                 results.append((path, img, filtered_boxes))
                 self.progress_signal.emit(i + 1, total)
@@ -308,10 +316,10 @@ class RBCDetectWindow(QMainWindow):
         print(f"[DEBUG] 正在加载模型: {path}")
         try:
             self.model = YOLO(path)
-            print(f"[DEBUG] 模型加载成功")
+            print("[DEBUG] 模型加载成功")
         except Exception as e:
             traceback.print_exc()
-            QMessageBox.critical(self, "加载失败", f"模型加载失败：\n{str(e)}\n\n路径：{path}")
+            QMessageBox.critical(self, "加载失败", f"模型加载失败：\n{e!s}\n\n路径：{path}")
             return
 
         self.model_path = os.path.abspath(path)
@@ -320,9 +328,7 @@ class RBCDetectWindow(QMainWindow):
             "color: #22543d; background-color: #c6f6d5; border-radius: 4px; padding: 3px 6px; font-size: 11px;"
         )
         self.status_indicator.setText("模型已就绪")
-        self.status_indicator.setStyleSheet(
-            "color: #38a169; font-size: 11px; font-weight: bold; padding: 2px 0;"
-        )
+        self.status_indicator.setStyleSheet("color: #38a169; font-size: 11px; font-weight: bold; padding: 2px 0;")
 
     def init_ui(self):
         central_widget = QWidget()
@@ -379,8 +385,7 @@ class RBCDetectWindow(QMainWindow):
         control_layout.addWidget(model_group)
 
         default_model = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "runs", "detect", "train7", "weights", "best.pt"
+            os.path.dirname(os.path.abspath(__file__)), "runs", "detect", "train7", "weights", "best.pt"
         )
         if os.path.exists(default_model):
             self.load_model(default_model)
@@ -547,9 +552,7 @@ class RBCDetectWindow(QMainWindow):
 
         # 底部状态栏
         status_bar = QFrame()
-        status_bar.setStyleSheet(
-            "QFrame { background-color: #edf2f7; border-radius: 6px; }"
-        )
+        status_bar.setStyleSheet("QFrame { background-color: #edf2f7; border-radius: 6px; }")
         status_bar_layout = QHBoxLayout(status_bar)
         status_bar_layout.setContentsMargins(12, 6, 12, 6)
         self.status_label = QLabel("就绪")
@@ -603,18 +606,12 @@ class RBCDetectWindow(QMainWindow):
 
     # ========== 功能函数 ==========
     def select_model(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "选择模型文件", "",
-            "PyTorch 模型 (*.pt *.pth);;所有文件 (*.*)"
-        )
+        path, _ = QFileDialog.getOpenFileName(self, "选择模型文件", "", "PyTorch 模型 (*.pt *.pth);;所有文件 (*.*)")
         if path:
             self.load_model(path)
 
     def load_single_img(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "选择图片", "",
-            "图片文件 (*.jpg *.jpeg *.png *.bmp *.tif *.tiff)"
-        )
+        path, _ = QFileDialog.getOpenFileName(self, "选择图片", "", "图片文件 (*.jpg *.jpeg *.png *.bmp *.tif *.tiff)")
         if path:
             self.current_img_paths = [path]
             self.current_results = []
@@ -692,11 +689,7 @@ class RBCDetectWindow(QMainWindow):
         img_copy = img.copy()
         qt_img = QImage(img_copy.data, w, h, bytes_per_line, QImage.Format_RGB888)
         pixmap = QPixmap.fromImage(qt_img)
-        scaled = pixmap.scaled(
-            self.img_label.size(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
-        )
+        scaled = pixmap.scaled(self.img_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.img_label.setPixmap(scaled)
         self.img_label.setStyleSheet("border: none; background-color: transparent;")
         self._current_qt_img = qt_img
@@ -704,7 +697,7 @@ class RBCDetectWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, '_current_img_copy') and self._current_img_copy is not None:
+        if hasattr(self, "_current_img_copy") and self._current_img_copy is not None:
             self.display_img(self._current_img_copy)
 
     def update_stat_label(self, boxes):
@@ -753,8 +746,7 @@ class RBCDetectWindow(QMainWindow):
         self.progress_label.setVisible(True)
 
         self.thread = DetectThread(
-            self.model, self.current_img_paths, conf, iou,
-            self.show_rbc, self.show_wbc, self.show_plate
+            self.model, self.current_img_paths, conf, iou, self.show_rbc, self.show_wbc, self.show_plate
         )
         self.thread.progress_signal.connect(self._on_progress)
         self.thread.finished_signal.connect(self.detect_finished)
