@@ -504,6 +504,8 @@ class RBCDetectWindow(QMainWindow):
         self.btn_prev.setObjectName("btn_prev")
         self.btn_next = QPushButton("下一张")
         self.btn_next.setObjectName("btn_next")
+        nav_btn_row.addWidget(self.btn_prev)
+        nav_btn_row.addWidget(self.btn_next)
         self.page_label = QLabel("0 / 0")
         self.page_label.setObjectName("page_label")
         self.page_label.setAlignment(Qt.AlignCenter)
@@ -643,23 +645,27 @@ class RBCDetectWindow(QMainWindow):
         self.img_count_label.setText(f"{len(paths)} 张图片")
 
     def show_image_at_idx(self, idx):
-        if 0 <= idx < len(self.current_img_paths):
+        if self.current_img_paths and 0 <= idx < len(self.current_img_paths):
             img = cv2.imread(self.current_img_paths[idx])
             if img is not None:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 self.display_img(img)
                 self.update_page_label()
 
+    def _get_total(self):
+        """返回当前有效的图片总数（优先使用检测结果数量）"""
+        return len(self.current_results) if self.current_results else len(self.current_img_paths)
+
     def update_page_label(self):
-        total = len(self.current_img_paths)
+        total = self._get_total()
         if total > 0:
-            cur = self.current_idx + 1 if self.current_idx < total else 0
-            self.page_label.setText(f"{cur} / {total}")
+            cur = min(max(self.current_idx, 0), total - 1)
+            self.page_label.setText(f"{cur + 1} / {total}")
         else:
             self.page_label.setText("0 / 0")
 
     def prev_image(self):
-        total = len(self.current_results) if self.current_results else len(self.current_img_paths)
+        total = self._get_total()
         if total == 0:
             return
         self.current_idx = (self.current_idx - 1) % total
@@ -672,7 +678,7 @@ class RBCDetectWindow(QMainWindow):
         self.update_page_label()
 
     def next_image(self):
-        total = len(self.current_results) if self.current_results else len(self.current_img_paths)
+        total = self._get_total()
         if total == 0:
             return
         self.current_idx = (self.current_idx + 1) % total
@@ -740,6 +746,16 @@ class RBCDetectWindow(QMainWindow):
         self.show_rbc = self.cb_rbc.isChecked()
         self.show_wbc = self.cb_wbc.isChecked()
         self.show_plate = self.cb_plate.isChecked()
+
+        # 断开上一次检测线程的信号，防止重复连接导致信号累积
+        if hasattr(self, 'thread') and self.thread is not None:
+            try:
+                self.thread.progress_signal.disconnect()
+                self.thread.finished_signal.disconnect()
+                self.thread.error_signal.disconnect()
+                self.thread.finished.disconnect()
+            except Exception:
+                pass
 
         self.detect_running = True
         self.status_label.setText("检测中...")
