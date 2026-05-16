@@ -1,3 +1,30 @@
+"""
+血细胞自动检测系统 — 基于 YOLOv8 + PyQt5 的图形化桌面应用
+============================================================
+
+功能概述:
+  - 加载 YOLOv8 训练模型, 对血涂片图像进行红细胞(RBC)/白细胞(WBC)/血小板(Platelet)自动检测
+  - 支持单张图片导入和文件夹批量导入
+  - 支持置信度/IoU 阈值调节, 类别显示筛选
+  - 多线程异步检测, 不阻塞界面操作
+  - 检测结果可视化(彩色标注框+置信度标签), 一键导出标注图+TXT报告
+  - 批量检测时提供进度条反馈和上一张/下一张导航
+
+技术栈:
+  - 深度学习: Ultralytics YOLOv8 (PyTorch)
+  - GUI框架: PyQt5 (Qt 5)
+  - 图像处理: OpenCV (cv2)
+  - 数值计算: NumPy
+
+架构:
+  - DetectThread (QThread): 后台检测线程, 发射进度和结果信号
+  - RBCDetectWindow (QMainWindow): 主窗口, 管理UI布局和业务逻辑
+  - STYLE_QSS: 全局 Qt 样式表, 定义界面外观
+
+作者: 李嘉豪
+日期: 2026
+"""
+
 import sys
 import os
 import traceback
@@ -212,11 +239,28 @@ QLabel#model_label {
 
 
 class DetectThread(QThread):
+    """
+    后台检测线程 — 将耗时的 YOLO 推理放到子线程, 避免阻塞主界面。
+
+    信号:
+        finished_signal(list): 所有图片检测完成后发射, 携带 [(path, img, boxes), ...]
+        progress_signal(int,int): 每完成一张图片发射, 携带 (当前序号, 总数)
+        error_signal(str): 检测过程中发生异常时发射, 携带错误信息字符串
+    """
+
     finished_signal = pyqtSignal(list)
     progress_signal = pyqtSignal(int, int)
     error_signal = pyqtSignal(str)
 
     def __init__(self, model, img_paths, conf_thres, iou_thres, show_rbc, show_wbc, show_plate):
+        """
+        参数:
+            model: 已加载的 YOLO 模型对象
+            img_paths: 待检测图片路径列表
+            conf_thres: 置信度阈值 (低于此值的检测结果被过滤)
+            iou_thres: IoU 阈值 (NMS 中用于去除重叠框)
+            show_rbc, show_wbc, show_plate: 各类别显示开关 (bool)
+        """
         super().__init__()
         self.model = model
         self.img_paths = img_paths
@@ -226,17 +270,28 @@ class DetectThread(QThread):
         self.show_wbc = show_wbc
         self.show_plate = show_plate
 
+        # 类别ID → 名称映射, 与 BCCD 数据集标注一致
         self.class_map = {
-            0: "RBC",
-            1: "WBC",
-            2: "Platelet"
+            0: "RBC",       # 红细胞
+            1: "WBC",       # 白细胞
+            2: "Platelet"   # 血小板
         }
 
     def run(self):
+        """
+        线程主函数 — 遍历图片路径列表, 逐张执行 YOLO 推理并绘制检测框。
+        每完成一张就发射 progress_signal, 全部完成后发射 finished_signal。
+        任何异常都会被捕获并通过 error_signal 发送。
+        """
+
         try:
-            results = []
-            total = len(self.img_paths)
+            results = []                    # 存储每张图的检测结果
+            total = len(self.img_paths)     # 图片总数
             for i, path in enumerate(self.img_paths):
+                # --- YOLOv8 推理 ---
+                # predict() 返回 Results 对象列表, 单张图片取 [0]
+                # save=False: 不自动保存, 由主程序控制
+                # verbose=False: 不打印控制台输出, 减少 I/O
                 pred = self.model.predict(
                     source=path,
                     conf=self.conf_thres,
@@ -245,14 +300,18 @@ class DetectThread(QThread):
                     verbose=False
                 )[0]
 
+                # --- 读取原图并转换颜色空间 ---
+                # cv2 默认 BGR → 转为 RGB 供 QImage 显示
                 img = cv2.imread(path)
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
+                # --- 按用户勾选的类别筛选检测框 ---
                 filtered_boxes = []
                 for box in pred.boxes:
                     cls_id = int(box.cls)
                     cls_name = self.class_map.get(cls_id, "unknown")
 
+                    # 仅保留用户勾选显示的类别
                     if (cls_name == "RBC" and self.show_rbc) or \
                             (cls_name == "WBC" and self.show_wbc) or \
                             (cls_name == "Platelet" and self.show_plate):
@@ -260,19 +319,23 @@ class DetectThread(QThread):
                         conf = float(box.conf)
                         filtered_boxes.append([x1, y1, x2, y2, cls_name, conf])
 
+                # --- 在图像上绘制检测框和标签 ---
                 for x1, y1, x2, y2, cls_name, conf in filtered_boxes:
+                    # 不同类别使用不同颜色 (BGR 格式, 但这里用 RGB 值, cv2 会自动处理)
                     if cls_name == "RBC":
-                        color = (220, 50, 50)
+                        color = (220, 50, 50)       # 红色系
                     elif cls_name == "WBC":
-                        color = (50, 180, 80)
+                        color = (50, 180, 80)       # 绿色系
                     else:
-                        color = (60, 100, 220)
+                        color = (60, 100, 220)      # 蓝色系
 
                     cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
                     cv2.putText(img, f"{cls_name} {conf:.2f}", (x1, y1 - 5),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
+                # 当前图片结果加入列表
                 results.append((path, img, filtered_boxes))
+                # 发射进度信号, 主界面更新进度条
                 self.progress_signal.emit(i + 1, total)
 
             self.finished_signal.emit(results)
@@ -281,7 +344,35 @@ class DetectThread(QThread):
 
 
 class RBCDetectWindow(QMainWindow):
+    """
+    血细胞检测系统主窗口。
+
+    采用左右分栏布局:
+      - 左侧: 控制面板 (QScrollArea 包裹, 支持纵向滚动)
+         > 标题栏 + 状态指示
+         > 模型管理 (加载/显示当前模型)
+         > 类别显示控制 (RBC/WBC/Platelet 复选框)
+         > 阈值设置 (置信度 + IoU, 滑块+数值框联动)
+         > 图片导入 (单张/文件夹)
+         > 操作按钮 (开始检测/保存结果/清空显示)
+         > 进度条 (检测进度)
+         > 图片导航 (上一张/下一张 + 页码)
+         > 检测统计 (各类别计数)
+
+      - 右侧: 图像显示区 (QScrollArea + QLabel)
+         > 底部状态栏 (状态信息 + 图片计数)
+
+    核心数据:
+      - current_img_paths (list[str]): 已导入的图片路径列表
+      - current_results (list[tuple]):  检测结果 [(path, img, boxes), ...]
+      - current_idx (int):              当前显示的图片/结果索引
+      - model (YOLO | None):            已加载的检测模型
+      - detect_running (bool):          检测是否正在进行中 (防止重复点击)
+    """
+
     def __init__(self):
+        """初始化窗口属性、全局状态变量, 然后构建 UI 并应用主题。"""
+
         super().__init__()
         self.setWindowTitle("血细胞检测系统 — YOLOv8")
         self.setGeometry(100, 100, 1700, 950)
@@ -580,17 +671,21 @@ class RBCDetectWindow(QMainWindow):
         self.btn_prev.clicked.connect(self.prev_image)
         self.btn_next.clicked.connect(self.next_image)
 
-    # ========== 滑块联动 ==========
+    # ==================== 滑块-数值框联动 (无递归) ====================
+    # 核心技巧: 使用 blockSignals(True/False) 阻断信号发射, 防止 A→B→A 无限循环。
+    # 例如: 滑块拖动 → setValue(数值框) → 数值框的 valueChanged 信号被 blockSignals 阻止,
+    #       不会触发 _on_conf_spin_changed, 从而避免再次调用 setValue(滑块)。
+
     def _on_conf_slider_changed(self, v):
-        val = v / 100.0
-        self.conf_spin.blockSignals(True)
-        self.conf_spin.setValue(val)
-        self.conf_spin.blockSignals(False)
+        val = v / 100.0                      # 滑块值 1-100 → 实际值 0.01-1.00
+        self.conf_spin.blockSignals(True)     # 阻断数值框信号
+        self.conf_spin.setValue(val)          # 同步到数值框
+        self.conf_spin.blockSignals(False)    # 恢复数值框信号
 
     def _on_conf_spin_changed(self, v):
-        self.conf_slider.blockSignals(True)
-        self.conf_slider.setValue(int(v * 100))
-        self.conf_slider.blockSignals(False)
+        self.conf_slider.blockSignals(True)   # 阻断滑块信号
+        self.conf_slider.setValue(int(v * 100))  # 实际值 0.01-1.00 → 滑块值 1-100
+        self.conf_slider.blockSignals(False)  # 恢复滑块信号
 
     def _on_iou_slider_changed(self, v):
         val = v / 100.0
@@ -691,6 +786,15 @@ class RBCDetectWindow(QMainWindow):
         self.update_page_label()
 
     def display_img(self, img):
+        """
+        将 numpy 数组图像显示到右侧图像标签上。
+
+        关键步骤:
+          - img.copy() → 防止 numpy 原始数据被 GC 回收造成 QImage 悬空指针崩溃
+          - QImage(img_copy.data, ...) → 零拷贝包装 numpy 数据为 Qt 图像对象
+          - pixmap.scaled() → 按 QLabel 大小等比缩放, 保证图像始终完整显示
+          - 持有 _current_qt_img 和 _current_img_copy 引用, 防止 Python 端数据被回收
+        """
         if img is None:
             return
         h, w, ch = img.shape
@@ -731,6 +835,16 @@ class RBCDetectWindow(QMainWindow):
         )
 
     def start_detect(self):
+        """
+        启动检测任务。
+
+        流程:
+          1. 前置检查 (模型已加载、图片已导入、未有正在运行的检测)
+          2. 断开旧线程信号 → 防止多次检测后信号累积
+          3. 设置 detect_running, 禁用按钮, 显示进度条
+          4. 创建 DetectThread, 连接信号 (progress/finished/error/QThread.finished)
+          5. 调用 thread.start() 启动线程
+        """
         if not self.model:
             QMessageBox.warning(self, "提示", "请先加载模型！")
             return
@@ -783,6 +897,11 @@ class RBCDetectWindow(QMainWindow):
         self.progress_label.setText(f"{current} / {total}")
 
     def _on_thread_done(self):
+        """
+        QThread.finished 信号回调 — 在线程 run() 返回后自动触发。
+        用于恢复 UI 状态: 启用按钮、隐藏进度条。
+        注意: 此信号在 finished_signal 之后发射, 因此 detect_finished 已先执行。
+        """
         self.detect_running = False
         self.btn_detect.setEnabled(True)
         self.btn_detect.setText("开 始 检 测")
@@ -790,6 +909,11 @@ class RBCDetectWindow(QMainWindow):
         self.progress_label.setVisible(False)
 
     def detect_finished(self, results):
+        """
+        检测完成的回调 (connected to DetectThread.finished_signal)。
+        保存检测结果, 显示第一张结果图, 更新统计和页码。
+        """
+
         self.current_results = results
         self.current_idx = 0
         if results:
@@ -841,6 +965,10 @@ class RBCDetectWindow(QMainWindow):
         self.status_label.setText("结果已保存")
 
     def clear_display(self):
+        """
+        清空当前所有导入的图片和检测结果, 恢复界面到初始状态。
+        包括: 路径列表、结果列表、索引、图片显示、状态文本、统计、进度条。
+        """
         self.current_img_paths = []
         self.current_results = []
         self.current_idx = 0

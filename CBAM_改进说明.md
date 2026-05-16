@@ -109,12 +109,12 @@ class C2f_CBAM(nn.Module):
 | 模型 | YOLOv8s-CBAM |
 | 数据集 | BCCD (RBC/WBC/Platelet, 3类) |
 | 图像尺寸 | 800×800 |
-| Epochs | 200 (早停于 Epoch 83，最佳 Epoch 32) |
+| Epochs | 200 (早停于 Epoch 83, 最佳 epoch 53) |
 | Batch size | 8 |
 | 优化器 | AdamW (auto) |
 | 初始学习率 | 0.001429 (auto) |
 | 训练时间 | 65.8 分钟 (RTX 3050 Laptop 4GB) |
-| 训练/验证/测试 | 874/99/109 张 |
+| 训练/验证/测试 | 954/99/39 张 |
 | 初始学习率 | 0.0006 |
 | 学习率调度 | Cosine Annealing |
 | Warmup | 10 epochs |

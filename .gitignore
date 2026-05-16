@@ -133,6 +133,9 @@ venv.bak/
 .vscode/
 .devcontainer/
 
+# Claude Code settings (contains API keys)
+.claude/
+
 # Rope project settings
 .ropeproject
 
