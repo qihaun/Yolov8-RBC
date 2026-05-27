@@ -21,7 +21,6 @@
   - RBCDetectWindow (QMainWindow): 主窗口, 管理UI布局和业务逻辑
   - STYLE_QSS: 全局 Qt 样式表, 定义界面外观
 
-作者: 李嘉豪
 日期: 2026
 """
 
