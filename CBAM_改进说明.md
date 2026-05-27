@@ -150,7 +150,7 @@ class C2f_CBAM(nn.Module):
 | 模型 | 路径 |
 |---|---|
 | 基线 YOLOv8s | `runs/detect/train7/weights/best.pt` |
-| **YOLOv8s-CBAM（本次训练）** | **`runs/detect/train_cbam/weights/best.pt`** |
+| **YOLOv8s-CBAM** | **`runs/detect/train_cbam/weights/best.pt`** |
 
 ## 文件清单
 
